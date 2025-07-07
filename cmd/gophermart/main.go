@@ -2,16 +2,21 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"github.com/go-chi/chi/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rookgm/gophermart/config"
-	"github.com/rookgm/gophermart/internal/gmart"
-	"github.com/rookgm/gophermart/internal/handler"
+	"github.com/rookgm/gophermart/internal/auth"
+	handler "github.com/rookgm/gophermart/internal/handler/http"
 	"github.com/rookgm/gophermart/internal/middleware"
+	"github.com/rookgm/gophermart/internal/repository"
+	"github.com/rookgm/gophermart/internal/repository/postgres"
+	"github.com/rookgm/gophermart/internal/service"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
 )
+
+const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
 
 // newLogger creates logger with log level
 func newLogger(level string) (*zap.Logger, error) {
@@ -45,35 +50,51 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// initialize database pool
-	dbpool, err := pgxpool.New(ctx, cfg.GMartDatabaseDSN)
+	// initialize database
+	db, err := postgres.New(ctx, cfg.GMartDatabaseDSN)
 	if err != nil {
-		logger.Error("Error initializing database pool", zap.Error(err))
+		logger.Error("Error initializing database", zap.Error(err))
 	}
-	defer dbpool.Close()
+	defer db.Close()
 
-	// ping database pool
-	if err := dbpool.Ping(ctx); err != nil {
-		logger.Fatal("Error ping database pool", zap.Error(err))
+	// migrate database
+	err = db.Migrate()
+	if err != nil {
+		logger.Fatal("Error migrating database", zap.Error(err))
 	}
 
-	// create repository
-	repo := gmart.NewRepository(dbpool)
+	tokenKey, err := hex.DecodeString(authTokenKey)
+	if err != nil {
+		logger.Fatal("Error extracting token key", zap.Error(err))
+	}
+	token := auth.NewAuthToken(tokenKey)
 
-	// create service
-	service := gmart.NewService(repo, cfg)
+	// dependency injection
+	// user
+	userRepo := repository.NewUserRepository(db)
+	userService := service.NewUserService(userRepo, token)
+	userHandler := handler.NewUserHandler(userService)
 
-	// create handler
-	handler := handler.New(service, logger)
+	// auth
+	authService := service.NewAuthService(userRepo, token)
+	authHandler := handler.NewAuthHandler(authService)
+
+	// order
+	orderRepo := repository.NewOrderRepository(db)
+	orderService := service.NewOrderService(orderRepo)
+	orderHandler := handler.NewOrderHandler(orderService)
 
 	router := chi.NewRouter()
 
-	mlogger := middleware.Logging(logger)
-	router.Use(mlogger)
+	router.Use(middleware.Logging(logger))
 
-	router.Route("/", func(r chi.Router) {
-		router.Post("/api/user/register", handler.RegisterUser())
-		router.Post("/api/user/login", handler.AuthenticationUser())
+	router.Post("/api/user/register", userHandler.RegisterUser())
+	router.Post("/api/user/login", authHandler.LoginUser())
+
+	// routes that require authentication
+	router.Group(func(group chi.Router) {
+		group.Use(middleware.Auth(token))
+		group.Post("/api/user/orders", orderHandler.UploadOrder())
 	})
 
 	logger.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
