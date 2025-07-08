@@ -95,6 +95,7 @@ func main() {
 	router.Group(func(group chi.Router) {
 		group.Use(middleware.Auth(token))
 		group.Post("/api/user/orders", orderHandler.UploadOrder())
+		group.Get("/api/user/orders", orderHandler.ListOrders())
 	})
 
 	logger.Info("Running server", zap.String("addr", cfg.GMartServerAddr))

@@ -9,13 +9,13 @@ import (
 )
 
 const (
-	insertQuery = `
+	insertUserQuery = `
 					INSERT INTO users (login, password) 
 					values ($1, $2)
 					RETURNING id, login, password, created_at;
 `
 
-	selectByLoginQuery = `
+	selectUserByLoginQuery = `
 					SELECT id, login, password, created_at FROM users
 					WHERE login = $1
 `
@@ -33,7 +33,7 @@ func NewUserRepository(db *postgres.DB) *UserRepository {
 
 // CreateUser insert new user into database
 func (ur *UserRepository) CreateUser(ctx context.Context, user *models.User) (*models.User, error) {
-	err := ur.db.QueryRow(ctx, insertQuery, user.Login, user.Password).Scan(&user.ID, &user.Login, &user.Password, &user.CreatedAt)
+	err := ur.db.QueryRow(ctx, insertUserQuery, user.Login, user.Password).Scan(&user.ID, &user.Login, &user.Password, &user.CreatedAt)
 	if err != nil {
 		if errCode := ur.db.ErrorCode(err); errCode == "23505" {
 			return nil, models.ErrConflictData
@@ -47,7 +47,7 @@ func (ur *UserRepository) CreateUser(ctx context.Context, user *models.User) (*m
 // GetUserByLogin returns user by login
 func (ur *UserRepository) GetUserByLogin(ctx context.Context, login string) (*models.User, error) {
 	user := models.User{}
-	err := ur.db.QueryRow(ctx, selectByLoginQuery, login).Scan(&user.ID, &user.Login, &user.Password, &user.CreatedAt)
+	err := ur.db.QueryRow(ctx, selectUserByLoginQuery, login).Scan(&user.ID, &user.Login, &user.Password, &user.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, models.ErrDataNotFound

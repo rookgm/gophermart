@@ -17,10 +17,10 @@ const (
 
 // Order is order entity
 type Order struct {
-	ID        uint64
-	UserID    uint64
-	OrderID   string
-	Status    string
-	Accrual   *float64
-	CreatedAt time.Time
+	ID         uint64
+	UserID     uint64
+	Number     string
+	Status     string
+	Accrual    *float64
+	UploadedAt time.Time
 }
