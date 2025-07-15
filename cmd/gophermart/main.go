@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"github.com/go-chi/chi/v5"
 	"github.com/rookgm/gophermart/config"
+	"github.com/rookgm/gophermart/internal/accrual"
 	"github.com/rookgm/gophermart/internal/auth"
 	handler "github.com/rookgm/gophermart/internal/handler/http"
 	"github.com/rookgm/gophermart/internal/middleware"
@@ -70,6 +71,9 @@ func main() {
 	token := auth.NewAuthToken(tokenKey)
 
 	// dependency injection
+	// accrual
+	accrualHandler := accrual.NewAccrualClient(cfg.AccrualSystemAddr)
+
 	// user
 	userRepo := repository.NewUserRepository(db)
 	userService := service.NewUserService(userRepo)
@@ -81,7 +85,7 @@ func main() {
 
 	// order
 	orderRepo := repository.NewOrderRepository(db)
-	orderService := service.NewOrderService(orderRepo)
+	orderService := service.NewOrderService(orderRepo, accrualHandler)
 	orderHandler := handler.NewOrderHandler(orderService)
 
 	// balance

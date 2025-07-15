@@ -24,6 +24,12 @@ const (
 						WHERE user_id = $1
 						ORDER BY uploaded_at DESC
 `
+	updateOrderQuery = `
+						UPDATE orders
+						SET status = $1, accrual = $2
+						WHERE number = $3
+						
+`
 )
 
 // OrderRepository implements OrderRepository interface
@@ -87,4 +93,24 @@ func (or *OrderRepository) GetOrdersByUserID(ctx context.Context, userID uint64)
 	}
 
 	return orders, nil
+}
+
+// UpdateOrderStatus update order status and accrual
+func (or *OrderRepository) UpdateOrderStatus(ctx context.Context, order models.Order) error {
+	tx, err := or.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, updateOrderQuery, order.Status, order.Accrual, order.Number)
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }
