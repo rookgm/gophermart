@@ -38,7 +38,7 @@ func NewOrderHandler(svc OrderService) *OrderHandler {
 func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value("userid").(uint64)
+		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -90,7 +90,7 @@ type ListOrdersResp struct {
 func (oh *OrderHandler) ListUserOrders() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value("userid").(uint64)
+		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

@@ -111,6 +111,4 @@ func main() {
 	if err := http.ListenAndServe(cfg.GMartServerAddr, router); err != nil {
 		logger.Fatal("Error starting server", zap.Error(err))
 	}
-
-	return
 }

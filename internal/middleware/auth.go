@@ -6,6 +6,12 @@ import (
 	"net/http"
 )
 
+type contextKey int
+
+const (
+	contextKeyUserID contextKey = iota
+)
+
 func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -21,7 +27,7 @@ func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), "userid", payload.UserID)
+			ctx := context.WithValue(r.Context(), contextKeyUserID, payload.UserID)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

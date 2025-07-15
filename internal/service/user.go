@@ -33,7 +33,7 @@ func (us *UserService) Register(ctx context.Context, user *models.User) error {
 	}
 
 	user.Password = hashedPassword
-	user, err = us.repo.CreateUser(ctx, user)
+	_, err = us.repo.CreateUser(ctx, user)
 
 	return err
 }
