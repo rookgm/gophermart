@@ -14,6 +14,8 @@ type OrderRepository interface {
 	CreateOrder(ctx context.Context, order *models.Order) (*models.Order, error)
 	// GetOrdersByUserID gets user orders
 	GetOrdersByUserID(ctx context.Context, userID uint64) ([]models.Order, error)
+	// GetOrderByNumber returns order by number
+	GetOrderByNumber(ctx context.Context, num string) (*models.Order, error)
 }
 
 // OrderService implements OrderService interface
@@ -21,7 +23,7 @@ type OrderService struct {
 	repo OrderRepository
 }
 
-// NewOrderService creates new NewOrderService instance
+// NewOrderService creates new OrderService instance
 func NewOrderService(repo OrderRepository) *OrderService {
 	return &OrderService{repo: repo}
 }
@@ -34,7 +36,18 @@ func (os *OrderService) Upload(ctx context.Context, order *models.Order) (*model
 	}
 	// check order id using Luhn algorithm
 	if ok := luhn.IsValid(num); !ok {
-		return nil, models.ErrInvalidOrderID
+		return nil, models.ErrInvalidOrderNumber
+	}
+
+	// check existing order
+	curOrder, err := os.repo.GetOrderByNumber(ctx, order.Number)
+	if err == nil {
+		if curOrder.UserID == order.UserID {
+			// order has been loaded by user
+			return nil, models.ErrOrderLoadedUser
+		}
+		// order has been loaded by another user
+		return nil, models.ErrOrderLoadedAnotherUser
 	}
 
 	// set order status

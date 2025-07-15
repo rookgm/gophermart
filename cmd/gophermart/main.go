@@ -72,8 +72,8 @@ func main() {
 	// dependency injection
 	// user
 	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo, token)
-	userHandler := handler.NewUserHandler(userService)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService, token)
 
 	// auth
 	authService := service.NewAuthService(userRepo, token)
@@ -83,6 +83,11 @@ func main() {
 	orderRepo := repository.NewOrderRepository(db)
 	orderService := service.NewOrderService(orderRepo)
 	orderHandler := handler.NewOrderHandler(orderService)
+
+	// balance
+	balanceRepo := repository.NewBalanceRepository(db)
+	balanceService := service.NewBalanceService(balanceRepo)
+	balanceHandler := handler.NewBalanceHandler(balanceService)
 
 	router := chi.NewRouter()
 
@@ -94,8 +99,11 @@ func main() {
 	// routes that require authentication
 	router.Group(func(group chi.Router) {
 		group.Use(middleware.Auth(token))
-		group.Post("/api/user/orders", orderHandler.UploadOrder())
-		group.Get("/api/user/orders", orderHandler.ListOrders())
+		group.Post("/api/user/orders", orderHandler.UploadUserOrder())
+		group.Get("/api/user/orders", orderHandler.ListUserOrders())
+		group.Get("/api/user/balance", balanceHandler.GetUserBalance())
+		group.Post("/api/user/balance/withdraw", balanceHandler.UserBalanceWithdrawal())
+		group.Get("/api/user/withdrawals", balanceHandler.GetUserWithdrawals())
 	})
 
 	logger.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
