@@ -5,15 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	_ "github.com/jackc/pgx/v5/pgconn/ctxwatch"
+	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/models"
 	"net/http"
 	"time"
-)
-
-type contextKey int
-
-const (
-	contextKeyUserID contextKey = iota
 )
 
 type BalanceService interface {
@@ -47,7 +42,7 @@ type balanceResponse struct {
 func (bh *BalanceHandler) GetUserBalance() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -87,7 +82,7 @@ type withdrawRequest struct {
 func (bh *BalanceHandler) UserBalanceWithdrawal() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -111,7 +106,7 @@ func (bh *BalanceHandler) UserBalanceWithdrawal() http.HandlerFunc {
 		if err != nil {
 			switch {
 			case errors.Is(err, models.ErrInsufficientBalance):
-				http.Error(w, "insufficient balance", http.StatusUnprocessableEntity)
+				http.Error(w, "insufficient balance", http.StatusPaymentRequired)
 			case errors.Is(err, models.ErrInvalidOrderNumber):
 				http.Error(w, "invalid order number", http.StatusUnprocessableEntity)
 			case errors.Is(err, models.ErrOrderExist):
@@ -140,7 +135,7 @@ type withdrawalsResponse struct {
 func (bh *BalanceHandler) GetUserWithdrawals() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

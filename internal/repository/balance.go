@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/rookgm/gophermart/internal/models"
 	"github.com/rookgm/gophermart/internal/repository/postgres"
 )
@@ -17,6 +19,15 @@ const (
 						WHERE user_id = $1
 						ORDER BY processed_at DESC
 `
+	selectBalanceQuery = `
+						select 
+    					(select coalesce(sum(accrual),0) 
+    					 from orders 
+    					 where user_id=$1 AND status='Processed'), 
+						(select coalesce(sum(amount),0)
+						 from withdrawals
+						 where user_id=$1)
+`
 )
 
 // BalanceRepository implements BalanceRepository interface
@@ -31,7 +42,15 @@ func NewBalanceRepository(db *postgres.DB) *BalanceRepository {
 
 // Balance returns current balance
 func (br *BalanceRepository) Balance(ctx context.Context, userID uint64) (models.Balance, error) {
-	return models.Balance{}, nil
+	balance := models.Balance{}
+	err := br.db.QueryRow(ctx, selectBalanceQuery, userID).Scan(&balance.Current, &balance.Withdrawn)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return models.Balance{}, models.ErrDataNotFound
+		}
+		return models.Balance{}, err
+	}
+	return balance, nil
 }
 
 // CreateWithdrawal creates new withdrawal

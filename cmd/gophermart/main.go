@@ -25,6 +25,12 @@ import (
 const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
 const shutdownTimeout = 5 * time.Second
 
+type contextKey uint64
+
+const (
+	contextKeyUserID contextKey = iota
+)
+
 func main() {
 
 	// create new config
@@ -123,9 +129,7 @@ func main() {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
 
-	// TODO stop accrual worker
-
-	<-shutdownCtx.Done()
+	orderService.StopAccrual(shutdownCtx)
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Log.Error("Error shutdown server", zap.Error(err))

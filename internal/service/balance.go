@@ -30,8 +30,7 @@ func NewBalanceService(repo BalanceRepository) *BalanceService {
 
 // GetBalance returns current user balance
 func (bs *BalanceService) GetBalance(ctx context.Context, userID uint64) (models.Balance, error) {
-	//return bs.repo.GetBalance(ctx, userID)
-	return models.Balance{}, nil
+	return bs.repo.Balance(ctx, userID)
 }
 
 // BalanceWithdrawal withdrawals of balance
@@ -46,7 +45,15 @@ func (bs *BalanceService) BalanceWithdrawal(ctx context.Context, withdraw *model
 		return nil, models.ErrInvalidOrderNumber
 	}
 
-	// TODO check insufficient balance
+	// check insufficient balance
+	balance, err := bs.GetBalance(ctx, withdraw.UserID)
+	if err != nil {
+		return nil, err
+	}
+
+	if withdraw.Sum > balance.Current-balance.Withdrawn {
+		return nil, models.ErrInsufficientBalance
+	}
 
 	w, err := bs.repo.CreateWithdrawal(ctx, withdraw)
 	if err != nil {

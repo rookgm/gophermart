@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/models"
 	"io"
 	"net/http"
@@ -38,7 +39,7 @@ func NewOrderHandler(svc OrderService) *OrderHandler {
 func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -90,7 +91,7 @@ type ListOrdersResp struct {
 func (oh *OrderHandler) ListUserOrders() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value(contextKeyUserID).(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return

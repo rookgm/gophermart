@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-type contextKey int
+type contextKey uint64
 
 const (
 	contextKeyUserID contextKey = iota
@@ -32,4 +32,9 @@ func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+func GetUserID(ctx context.Context) (uint64, bool) {
+	id, ok := ctx.Value(contextKeyUserID).(uint64)
+	return id, ok
 }

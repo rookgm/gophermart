@@ -5,9 +5,10 @@ import (
 	"errors"
 	"github.com/phedde/luhn-algorithm"
 	"github.com/rookgm/gophermart/internal/accrual"
+	"github.com/rookgm/gophermart/internal/logger"
 	"github.com/rookgm/gophermart/internal/models"
+	"go.uber.org/zap"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -27,11 +28,18 @@ type OrderRepository interface {
 type OrderService struct {
 	repo    OrderRepository
 	handler *accrual.Handler
+	ctx     context.Context
+	cancel  context.CancelFunc
 }
 
 // NewOrderService creates new OrderService instance
 func NewOrderService(repo OrderRepository, handler *accrual.Handler) *OrderService {
-	return &OrderService{repo: repo, handler: handler}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &OrderService{repo: repo,
+		handler: handler,
+		ctx:     ctx,
+		cancel:  cancel,
+	}
 }
 
 // Upload uploads user order
@@ -67,6 +75,8 @@ func (os *OrderService) Upload(ctx context.Context, order *models.Order) (*model
 		return nil, err
 	}
 
+	os.doAccrualForOrder(order.Number)
+
 	return order, nil
 }
 
@@ -75,41 +85,70 @@ func (os *OrderService) ListUserOrders(ctx context.Context, userID uint64) ([]mo
 	return os.repo.GetOrdersByUserID(ctx, userID)
 }
 
+// doAccrualForOrder performs accrual for order
 func (os *OrderService) doAccrualForOrder(order string) error {
 	go func() {
-		delay := 1 * time.Second
-		var errTooManyReq *models.TooManyRequestsError
+		var errTooManyReq models.TooManyRequestsError
+		delay := time.Duration(0)
+		logger.Log.Debug("starting accrual")
 
-		for i := 0; i < 3; i++ {
+		for i := 1; i <= 3; i++ {
+			t := time.NewTimer(delay)
 			select {
-			case <-time.After(delay):
-				delay = 0
+			case <-os.ctx.Done():
+				logger.Log.Debug("accrual is done")
+				t.Stop()
+				return
+			case <-t.C:
+				logger.Log.Debug("timeout")
 			}
-			resp, err := os.handler.GetAccrualForOrder(context.TODO(), order)
+			logger.Log.Debug("attempt:", zap.Int("number", i))
+			logger.Log.Debug("get accrual for order:", zap.String("number", order))
+			resp, err := os.handler.GetAccrualForOrder(os.ctx, order)
 			if err != nil {
 				switch {
-				case errors.As(err, errTooManyReq):
+				case errors.As(err, &errTooManyReq):
+					logger.Log.Debug("too many request")
 					delay = errTooManyReq.RetryAfter
 					continue
 				}
 				return
 			}
 
-			curOrder, err := os.repo.GetOrderByNumber(context.TODO(), order)
+			logger.Log.Debug("accrual response", zap.Any("order", resp))
+
+			curOrder, err := os.repo.GetOrderByNumber(os.ctx, order)
 			if err != nil {
+				logger.Log.Error("get order", zap.String("number", order))
 				return
 			}
 
-			if strings.Compare(resp.Status, models.OrderStatusInvalid) == 0 && *resp.Accrual == 0 {
-				return
-			}
 			// set new accrual and status
 			curOrder.Accrual = resp.Accrual
 			curOrder.Status = resp.Status
 
-			os.repo.UpdateOrderStatus(context.TODO(), *curOrder)
+			logger.Log.Debug("update order status", zap.String("number", order))
+			if err := os.repo.UpdateOrderStatus(os.ctx, *curOrder); err != nil {
+				logger.Log.Error("update order status", zap.String("number", order))
+			}
+
+			logger.Log.Debug("order status has been updated successfully", zap.String("number", order))
+
+			t.Stop()
+			break
 		}
 	}()
 
 	return nil
+}
+
+// StopAccrual stops accrual
+func (os *OrderService) StopAccrual(ctx context.Context) {
+	os.cancel()
+	select {
+	case <-os.ctx.Done():
+		logger.Log.Info("accrual is canceled")
+	case <-ctx.Done():
+		logger.Log.Info("accrual is stopped")
+	}
 }
