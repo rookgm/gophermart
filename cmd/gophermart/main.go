@@ -8,6 +8,7 @@ import (
 	"github.com/rookgm/gophermart/internal/accrual"
 	"github.com/rookgm/gophermart/internal/auth"
 	handler "github.com/rookgm/gophermart/internal/handler/http"
+	"github.com/rookgm/gophermart/internal/logger"
 	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/repository"
 	"github.com/rookgm/gophermart/internal/repository/postgres"
@@ -19,19 +20,6 @@ import (
 
 const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
 
-// newLogger creates logger with log level
-func newLogger(level string) (*zap.Logger, error) {
-
-	loggerLvl, err := zap.ParseAtomicLevel(level)
-	if err != nil {
-		return nil, err
-	}
-	loggerCfg := zap.NewProductionConfig()
-	loggerCfg.Level = loggerLvl
-
-	return loggerCfg.Build()
-}
-
 func main() {
 
 	// create new config
@@ -41,11 +29,9 @@ func main() {
 	}
 
 	// initialize logger
-	logger, err := newLogger(cfg.LogLevel)
-	if err != nil {
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		log.Fatalf("Error initializing logger: %v", err)
 	}
-	defer logger.Sync()
 
 	// create context
 	ctx, cancel := context.WithCancel(context.Background())
@@ -54,19 +40,19 @@ func main() {
 	// initialize database
 	db, err := postgres.New(ctx, cfg.GMartDatabaseDSN)
 	if err != nil {
-		logger.Error("Error initializing database", zap.Error(err))
+		logger.Log.Error("Error initializing database", zap.Error(err))
 	}
 	defer db.Close()
 
 	// migrate database
 	err = db.Migrate()
 	if err != nil {
-		logger.Fatal("Error migrating database", zap.Error(err))
+		logger.Log.Fatal("Error migrating database", zap.Error(err))
 	}
 
 	tokenKey, err := hex.DecodeString(authTokenKey)
 	if err != nil {
-		logger.Fatal("Error extracting token key", zap.Error(err))
+		logger.Log.Fatal("Error extracting token key", zap.Error(err))
 	}
 	token := auth.NewAuthToken(tokenKey)
 
@@ -95,7 +81,7 @@ func main() {
 
 	router := chi.NewRouter()
 
-	router.Use(middleware.Logging(logger))
+	router.Use(middleware.Logging(logger.Log))
 
 	router.Post("/api/user/register", userHandler.RegisterUser())
 	router.Post("/api/user/login", authHandler.LoginUser())
@@ -110,9 +96,9 @@ func main() {
 		group.Get("/api/user/withdrawals", balanceHandler.GetUserWithdrawals())
 	})
 
-	logger.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
+	logger.Log.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
 
 	if err := http.ListenAndServe(cfg.GMartServerAddr, router); err != nil {
-		logger.Fatal("Error starting server", zap.Error(err))
+		logger.Log.Fatal("Error starting server", zap.Error(err))
 	}
 }
