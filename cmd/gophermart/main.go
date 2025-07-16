@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/rookgm/gophermart/config"
 	"github.com/rookgm/gophermart/internal/accrual"
@@ -16,9 +17,13 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
+const shutdownTimeout = 5 * time.Second
 
 func main() {
 
@@ -34,13 +39,13 @@ func main() {
 	}
 
 	// create context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// initialize database
 	db, err := postgres.New(ctx, cfg.GMartDatabaseDSN)
 	if err != nil {
-		logger.Log.Error("Error initializing database", zap.Error(err))
+		logger.Log.Fatal("Error initializing database", zap.Error(err))
 	}
 	defer db.Close()
 
@@ -96,9 +101,35 @@ func main() {
 		group.Get("/api/user/withdrawals", balanceHandler.GetUserWithdrawals())
 	})
 
-	logger.Log.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
-
-	if err := http.ListenAndServe(cfg.GMartServerAddr, router); err != nil {
-		logger.Log.Fatal("Error starting server", zap.Error(err))
+	// set server parameters
+	srv := http.Server{
+		Addr:    cfg.GMartServerAddr,
+		Handler: router,
 	}
+
+	logger.Log.Info("Starting server...")
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Log.Fatal("Error starting server", zap.Error(err))
+		}
+	}()
+
+	logger.Log.Info("Server is started", zap.String("addr", cfg.GMartServerAddr))
+	<-ctx.Done()
+
+	logger.Log.Info("Shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	// TODO stop accrual worker
+
+	<-shutdownCtx.Done()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Log.Error("Error shutdown server", zap.Error(err))
+	}
+
+	logger.Log.Info("server is finished")
 }
