@@ -65,7 +65,7 @@ func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 			case errors.Is(err, models.ErrOrderLoadedUser):
 				http.Error(w, "order has already been uploaded", http.StatusOK)
 			case errors.Is(err, models.ErrOrderLoadedAnotherUser):
-				http.Error(w, "order has already been uploaded by another user", http.StatusUnprocessableEntity)
+				http.Error(w, "order has already been uploaded by another user", http.StatusConflict)
 			default:
 				http.Error(w, "internal error", http.StatusInternalServerError)
 			}

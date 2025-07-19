@@ -23,7 +23,7 @@ const (
 						select 
     					(select coalesce(sum(accrual),0) 
     					 from orders 
-    					 where user_id=$1 AND status='Processed'), 
+    					 where user_id=$1 AND status='PROCESSED'), 
 						(select coalesce(sum(amount),0)
 						 from withdrawals
 						 where user_id=$1)

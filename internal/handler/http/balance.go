@@ -55,7 +55,7 @@ func (bh *BalanceHandler) GetUserBalance() http.HandlerFunc {
 		}
 
 		balanceResp := balanceResponse{
-			Current:   balance.Current,
+			Current:   balance.Current - balance.Withdrawn,
 			Withdrawn: balance.Withdrawn,
 		}
 

@@ -28,7 +28,6 @@ const (
 						UPDATE orders
 						SET status = $1, accrual = $2
 						WHERE number = $3
-						
 `
 )
 

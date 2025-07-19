@@ -89,33 +89,43 @@ func (os *OrderService) ListUserOrders(ctx context.Context, userID uint64) ([]mo
 func (os *OrderService) doAccrualForOrder(order string) error {
 	go func() {
 		var errTooManyReq models.TooManyRequestsError
-		delay := time.Duration(0)
+		duration := 1 * time.Second
+
 		logger.Log.Debug("starting accrual")
 
+		timer := time.NewTimer(duration)
+		defer timer.Stop()
+
 		for i := 1; i <= 3; i++ {
-			t := time.NewTimer(delay)
+			logger.Log.Debug("attempt:", zap.Int("number", i))
+			timer.Reset(duration)
+
 			select {
 			case <-os.ctx.Done():
 				logger.Log.Debug("accrual is done")
-				t.Stop()
 				return
-			case <-t.C:
+			case <-timer.C:
 				logger.Log.Debug("timeout")
+				duration = 0
 			}
-			logger.Log.Debug("attempt:", zap.Int("number", i))
-			logger.Log.Debug("get accrual for order:", zap.String("number", order))
+
+			logger.Log.Debug("try get accrual for order:", zap.String("number", order))
 			resp, err := os.handler.GetAccrualForOrder(os.ctx, order)
 			if err != nil {
 				switch {
 				case errors.As(err, &errTooManyReq):
 					logger.Log.Debug("too many request")
-					delay = errTooManyReq.RetryAfter
+					duration = errTooManyReq.RetryAfter
 					continue
 				}
+				logger.Log.Error("accrual request error", zap.Error(err))
 				return
 			}
 
-			logger.Log.Debug("accrual response", zap.Any("order", resp))
+			logger.Log.Debug("accrual is ok, response:",
+				zap.String("order", resp.Number),
+				zap.String("status", resp.Status),
+				zap.Float64p("accrual", resp.Accrual))
 
 			curOrder, err := os.repo.GetOrderByNumber(os.ctx, order)
 			if err != nil {
@@ -133,8 +143,6 @@ func (os *OrderService) doAccrualForOrder(order string) error {
 			}
 
 			logger.Log.Debug("order status has been updated successfully", zap.String("number", order))
-
-			t.Stop()
 			break
 		}
 	}()

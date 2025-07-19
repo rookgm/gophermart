@@ -17,7 +17,7 @@ func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("auth_token")
 			if err != nil {
-				http.Error(w, "can not get cookie", http.StatusInternalServerError)
+				http.Error(w, "can not get cookie", http.StatusUnauthorized)
 				return
 			}
 
