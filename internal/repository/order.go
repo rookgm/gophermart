@@ -12,7 +12,7 @@ const (
 	insertOrderQuery = `
 						INSERT INTO orders (user_id, number, status) 
 						values ($1, $2, $3)
-						RETURNING id, user_id, number, status, accrual, uploaded_at;
+						RETURNING id, user_id, number, status, accrual, uploaded_at
 `
 	selectOrderByNumQuery = `
 						SELECT id, user_id, number, status, accrual, uploaded_at FROM orders
@@ -20,8 +20,14 @@ const (
 `
 
 	selectOrdersByUserIDQuery = `
-						SELECT * FROM orders
+						SELECT id, user_id, number, status, accrual, uploaded_at FROM orders
 						WHERE user_id = $1
+						ORDER BY uploaded_at DESC
+`
+	updateOrderQuery = `
+						UPDATE orders
+						SET status = $1, accrual = $2
+						WHERE number = $3
 `
 )
 
@@ -37,18 +43,7 @@ func NewOrderRepository(db *postgres.DB) *OrderRepository {
 
 // CreateOrder inserts new order to database
 func (or *OrderRepository) CreateOrder(ctx context.Context, order *models.Order) (*models.Order, error) {
-	// check existing order
-	curOrder, err := or.GetOrderByNumber(ctx, order.Number)
-	if err == nil {
-		if curOrder.UserID == order.UserID {
-			// order has been loaded by user
-			return nil, models.ErrOrderLoadedUser
-		}
-		// order has been loaded by another user
-		return nil, models.ErrOrderLoadedAnotherUser
-	}
-
-	err = or.db.QueryRow(ctx, insertOrderQuery, order.UserID, order.Number, order.Status).Scan(&order.ID, &order.UserID, &order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
+	err := or.db.QueryRow(ctx, insertOrderQuery, order.UserID, order.Number, order.Status).Scan(&order.ID, &order.UserID, &order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
 	if err != nil {
 		if errCode := or.db.ErrorCode(err); errCode == "23505" {
 			return nil, models.ErrConflictData
@@ -97,4 +92,24 @@ func (or *OrderRepository) GetOrdersByUserID(ctx context.Context, userID uint64)
 	}
 
 	return orders, nil
+}
+
+// UpdateOrderStatus update order status and accrual
+func (or *OrderRepository) UpdateOrderStatus(ctx context.Context, order models.Order) error {
+	tx, err := or.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	_, err = tx.Exec(ctx, updateOrderQuery, order.Status, order.Accrual, order.Number)
+	if err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+
+	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/rookgm/gophermart/internal/models"
-	"github.com/rookgm/gophermart/internal/service"
 	"net/http"
 	"time"
 )
@@ -13,19 +12,25 @@ import (
 // UserService is interface for interfacing with user-related logic
 type UserService interface {
 	// Register is registers new user
-	Register(ctx context.Context, user *models.User) (*models.User, error)
+	Register(ctx context.Context, user *models.User) error
+}
+
+type TokenService interface {
+	CreateToken(user *models.User) (string, error)
+	VerifyToken(tokenString string) (*models.TokenPayload, error)
 }
 
 // UserHandler represents HTTP handler for user-related requests
 type UserHandler struct {
 	userSvc  UserService
-	tokenSvc service.TokenService
+	tokenSvc TokenService
 }
 
 // NewUserHandler creates new UserHandler instance
-func NewUserHandler(us UserService) *UserHandler {
+func NewUserHandler(us UserService, ts TokenService) *UserHandler {
 	return &UserHandler{
-		userSvc: us,
+		userSvc:  us,
+		tokenSvc: ts,
 	}
 }
 
@@ -42,7 +47,6 @@ type registerRequest struct {
 // 500 — внутренняя ошибка сервера.
 func (uh *UserHandler) RegisterUser() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-
 		var regReq registerRequest
 
 		if err := json.NewDecoder(r.Body).Decode(&regReq); err != nil {
@@ -56,7 +60,7 @@ func (uh *UserHandler) RegisterUser() http.HandlerFunc {
 			Password: regReq.Password,
 		}
 
-		_, err := uh.userSvc.Register(r.Context(), &user)
+		err := uh.userSvc.Register(r.Context(), &user)
 		if err != nil {
 			if errors.Is(err, models.ErrConflictData) {
 				http.Error(w, "bad request", http.StatusConflict)
@@ -74,7 +78,7 @@ func (uh *UserHandler) RegisterUser() http.HandlerFunc {
 		}
 
 		http.SetCookie(w, &http.Cookie{
-			Name:     "auth_gophermart",
+			Name:     "auth_token",
 			Value:    token,
 			Path:     "/",
 			Expires:  time.Now().Add(24 * time.Hour),

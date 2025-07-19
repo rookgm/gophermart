@@ -3,10 +3,13 @@ package main
 import (
 	"context"
 	"encoding/hex"
+	"errors"
 	"github.com/go-chi/chi/v5"
 	"github.com/rookgm/gophermart/config"
+	"github.com/rookgm/gophermart/internal/accrual"
 	"github.com/rookgm/gophermart/internal/auth"
 	handler "github.com/rookgm/gophermart/internal/handler/http"
+	"github.com/rookgm/gophermart/internal/logger"
 	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/repository"
 	"github.com/rookgm/gophermart/internal/repository/postgres"
@@ -14,22 +17,19 @@ import (
 	"go.uber.org/zap"
 	"log"
 	"net/http"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
+const shutdownTimeout = 5 * time.Second
 
-// newLogger creates logger with log level
-func newLogger(level string) (*zap.Logger, error) {
+type contextKey uint64
 
-	loggerLvl, err := zap.ParseAtomicLevel(level)
-	if err != nil {
-		return nil, err
-	}
-	loggerCfg := zap.NewProductionConfig()
-	loggerCfg.Level = loggerLvl
-
-	return loggerCfg.Build()
-}
+const (
+	contextKeyUserID contextKey = iota
+)
 
 func main() {
 
@@ -40,40 +40,41 @@ func main() {
 	}
 
 	// initialize logger
-	logger, err := newLogger(cfg.LogLevel)
-	if err != nil {
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		log.Fatalf("Error initializing logger: %v", err)
 	}
-	defer logger.Sync()
 
 	// create context
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
 	// initialize database
 	db, err := postgres.New(ctx, cfg.GMartDatabaseDSN)
 	if err != nil {
-		logger.Error("Error initializing database", zap.Error(err))
+		logger.Log.Fatal("Error initializing database", zap.Error(err))
 	}
 	defer db.Close()
 
 	// migrate database
 	err = db.Migrate()
 	if err != nil {
-		logger.Fatal("Error migrating database", zap.Error(err))
+		logger.Log.Fatal("Error migrating database", zap.Error(err))
 	}
 
 	tokenKey, err := hex.DecodeString(authTokenKey)
 	if err != nil {
-		logger.Fatal("Error extracting token key", zap.Error(err))
+		logger.Log.Fatal("Error extracting token key", zap.Error(err))
 	}
 	token := auth.NewAuthToken(tokenKey)
 
 	// dependency injection
+	// accrual
+	accrualHandler := accrual.NewAccrualClient(cfg.AccrualSystemAddr)
+
 	// user
 	userRepo := repository.NewUserRepository(db)
-	userService := service.NewUserService(userRepo, token)
-	userHandler := handler.NewUserHandler(userService)
+	userService := service.NewUserService(userRepo)
+	userHandler := handler.NewUserHandler(userService, token)
 
 	// auth
 	authService := service.NewAuthService(userRepo, token)
@@ -81,12 +82,17 @@ func main() {
 
 	// order
 	orderRepo := repository.NewOrderRepository(db)
-	orderService := service.NewOrderService(orderRepo)
+	orderService := service.NewOrderService(orderRepo, accrualHandler)
 	orderHandler := handler.NewOrderHandler(orderService)
+
+	// balance
+	balanceRepo := repository.NewBalanceRepository(db)
+	balanceService := service.NewBalanceService(balanceRepo)
+	balanceHandler := handler.NewBalanceHandler(balanceService)
 
 	router := chi.NewRouter()
 
-	router.Use(middleware.Logging(logger))
+	router.Use(middleware.Logging(logger.Log))
 
 	router.Post("/api/user/register", userHandler.RegisterUser())
 	router.Post("/api/user/login", authHandler.LoginUser())
@@ -94,15 +100,40 @@ func main() {
 	// routes that require authentication
 	router.Group(func(group chi.Router) {
 		group.Use(middleware.Auth(token))
-		group.Post("/api/user/orders", orderHandler.UploadOrder())
-		group.Get("/api/user/orders", orderHandler.ListOrders())
+		group.Post("/api/user/orders", orderHandler.UploadUserOrder())
+		group.Get("/api/user/orders", orderHandler.ListUserOrders())
+		group.Get("/api/user/balance", balanceHandler.GetUserBalance())
+		group.Post("/api/user/balance/withdraw", balanceHandler.UserBalanceWithdrawal())
+		group.Get("/api/user/withdrawals", balanceHandler.GetUserWithdrawals())
 	})
 
-	logger.Info("Running server", zap.String("addr", cfg.GMartServerAddr))
-
-	if err := http.ListenAndServe(cfg.GMartServerAddr, router); err != nil {
-		logger.Fatal("Error starting server", zap.Error(err))
+	// set server parameters
+	srv := http.Server{
+		Addr:    cfg.GMartServerAddr,
+		Handler: router,
 	}
 
-	return
+	logger.Log.Info("Starting server...")
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Log.Fatal("Error starting server", zap.Error(err))
+		}
+	}()
+
+	logger.Log.Info("Server is started", zap.String("addr", cfg.GMartServerAddr))
+	<-ctx.Done()
+
+	logger.Log.Info("Shutting down server...")
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
+	defer cancel()
+
+	orderService.StopAccrual(shutdownCtx)
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		logger.Log.Error("Error shutdown server", zap.Error(err))
+	}
+
+	logger.Log.Info("server is finished")
 }

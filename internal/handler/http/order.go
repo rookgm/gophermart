@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/models"
 	"io"
 	"net/http"
@@ -23,6 +24,11 @@ type OrderHandler struct {
 }
 
 // NewOrderHandler creates new OrderService instance
+func NewOrderHandler(svc OrderService) *OrderHandler {
+	return &OrderHandler{svc: svc}
+}
+
+// UploadUserOrder uploads user order
 // 200 — номер заказа уже был загружен этим пользователем;
 // 202 — новый номер заказа принят в обработку;
 // 400 — неверный формат запроса;
@@ -30,15 +36,10 @@ type OrderHandler struct {
 // 409 — номер заказа уже был загружен другим пользователем;
 // 422 — неверный формат номера заказа;
 // 500 — внутренняя ошибка сервера.
-func NewOrderHandler(svc OrderService) *OrderHandler {
-	return &OrderHandler{svc: svc}
-}
-
-// UploadOrder uploads user order
-func (oh *OrderHandler) UploadOrder() http.HandlerFunc {
+func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value("userid").(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -59,12 +60,12 @@ func (oh *OrderHandler) UploadOrder() http.HandlerFunc {
 		_, err = oh.svc.Upload(r.Context(), &ord)
 		if err != nil {
 			switch {
-			case errors.Is(err, models.ErrInvalidOrderID):
+			case errors.Is(err, models.ErrInvalidOrderNumber):
 				http.Error(w, "invalid order number", http.StatusUnprocessableEntity)
 			case errors.Is(err, models.ErrOrderLoadedUser):
 				http.Error(w, "order has already been uploaded", http.StatusOK)
 			case errors.Is(err, models.ErrOrderLoadedAnotherUser):
-				http.Error(w, "order has already been uploaded by another user", http.StatusUnprocessableEntity)
+				http.Error(w, "order has already been uploaded by another user", http.StatusConflict)
 			default:
 				http.Error(w, "internal error", http.StatusInternalServerError)
 			}
@@ -82,15 +83,15 @@ type ListOrdersResp struct {
 	UploadedAt string   `json:"uploaded_at"`
 }
 
-// ListOrders get list uploaded user orders
+// ListUserOrders get list uploaded user orders
 // 200 — успешная обработка запроса.
 // 204 — нет данных для ответа.
 // 401 — пользователь не авторизован.
 // 500 — внутренняя ошибка сервера.
-func (oh *OrderHandler) ListOrders() http.HandlerFunc {
+func (oh *OrderHandler) ListUserOrders() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// extract user id
-		userID, ok := r.Context().Value("userid").(uint64)
+		userID, ok := middleware.GetUserID(r.Context())
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
