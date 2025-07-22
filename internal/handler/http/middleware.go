@@ -1,18 +1,28 @@
-package middleware
+package handler
 
 import (
 	"context"
+	"github.com/rookgm/gophermart/internal/models"
 	"github.com/rookgm/gophermart/internal/service"
 	"net/http"
 )
 
+/*
 type contextKey uint64
 
 const (
 	contextKeyUserID contextKey = iota
 )
+*/
 
-func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
+type contextKey string
+
+const (
+	authPayloadKey contextKey = "auth_payload"
+)
+
+// AuthMiddleware  gets the token from the cookie and passes it to the context
+func AuthMiddleware(ts service.TokenService) func(handler http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			cookie, err := r.Cookie("auth_token")
@@ -27,14 +37,15 @@ func Auth(ts service.TokenService) func(handler http.Handler) http.Handler {
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), contextKeyUserID, payload.UserID)
+			ctx := context.WithValue(r.Context(), authPayloadKey, payload)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
-func GetUserID(ctx context.Context) (uint64, bool) {
-	id, ok := ctx.Value(contextKeyUserID).(uint64)
-	return id, ok
+// getAuthPayload extracts authorization token payload from context
+func getAuthPayload(ctx context.Context, key contextKey) (*models.TokenPayload, bool) {
+	payload, ok := ctx.Value(key).(*models.TokenPayload)
+	return payload, ok
 }

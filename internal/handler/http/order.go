@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/models"
 	"io"
 	"net/http"
@@ -38,8 +37,7 @@ func NewOrderHandler(svc OrderService) *OrderHandler {
 // 500 — внутренняя ошибка сервера.
 func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// extract user id
-		userID, ok := middleware.GetUserID(r.Context())
+		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -53,7 +51,7 @@ func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 		defer r.Body.Close()
 
 		ord := models.Order{
-			UserID: userID,
+			UserID: authPayload.UserID,
 			Number: string(body),
 		}
 
@@ -90,15 +88,14 @@ type ListOrdersResp struct {
 // 500 — внутренняя ошибка сервера.
 func (oh *OrderHandler) ListUserOrders() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// extract user id
-		userID, ok := middleware.GetUserID(r.Context())
+		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
 		// get user orders
-		orders, err := oh.svc.ListUserOrders(r.Context(), userID)
+		orders, err := oh.svc.ListUserOrders(r.Context(), authPayload.UserID)
 		if err != nil {
 			if errors.Is(err, models.ErrDataNotFound) {
 				http.Error(w, "orders not found", http.StatusNoContent)

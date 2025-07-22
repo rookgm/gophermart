@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	_ "github.com/jackc/pgx/v5/pgconn/ctxwatch"
-	"github.com/rookgm/gophermart/internal/middleware"
 	"github.com/rookgm/gophermart/internal/models"
 	"net/http"
 	"time"
@@ -41,14 +40,13 @@ type balanceResponse struct {
 // 500 — внутренняя ошибка сервера.
 func (bh *BalanceHandler) GetUserBalance() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// extract user id
-		userID, ok := middleware.GetUserID(r.Context())
+		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		balance, err := bh.svc.GetBalance(r.Context(), userID)
+		balance, err := bh.svc.GetBalance(r.Context(), authPayload.UserID)
 		if err != nil {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -81,8 +79,7 @@ type withdrawRequest struct {
 // 500 — внутренняя ошибка сервера.
 func (bh *BalanceHandler) UserBalanceWithdrawal() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// extract user id
-		userID, ok := middleware.GetUserID(r.Context())
+		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
@@ -97,7 +94,7 @@ func (bh *BalanceHandler) UserBalanceWithdrawal() http.HandlerFunc {
 		defer r.Body.Close()
 
 		withdraw := models.Withdraw{
-			UserID:      userID,
+			UserID:      authPayload.UserID,
 			OrderNumber: withdrawReq.Order,
 			Sum:         withdrawReq.Sum,
 		}
@@ -134,14 +131,13 @@ type withdrawalsResponse struct {
 // 500 — внутренняя ошибка сервера.
 func (bh *BalanceHandler) GetUserWithdrawals() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// extract user id
-		userID, ok := middleware.GetUserID(r.Context())
+		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
 		if !ok {
 			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
-		withdrawals, err := bh.svc.GetWithdrawals(r.Context(), userID)
+		withdrawals, err := bh.svc.GetWithdrawals(r.Context(), authPayload.UserID)
 		if err != nil {
 			switch {
 			case errors.Is(err, models.ErrWithdrawalsNotExist):

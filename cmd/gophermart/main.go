@@ -25,12 +25,6 @@ import (
 const authTokenKey = "f53ac685bbceebd75043e6be2e06ee07"
 const shutdownTimeout = 5 * time.Second
 
-type contextKey uint64
-
-const (
-	contextKeyUserID contextKey = iota
-)
-
 func main() {
 
 	// create new config
@@ -99,7 +93,7 @@ func main() {
 
 	// routes that require authentication
 	router.Group(func(group chi.Router) {
-		group.Use(middleware.Auth(token))
+		group.Use(handler.AuthMiddleware(token))
 		group.Post("/api/user/orders", orderHandler.UploadUserOrder())
 		group.Get("/api/user/orders", orderHandler.ListUserOrders())
 		group.Get("/api/user/balance", balanceHandler.GetUserBalance())
