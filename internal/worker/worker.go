@@ -21,11 +21,14 @@ func NewOrderProcessor(svc OrderService) *OrderProcessor {
 	return &OrderProcessor{svc: svc}
 }
 
-// ProcessOrders
+// ProcessOrders runs workers perform accrual for order
 func (op *OrderProcessor) ProcessOrders(ctx context.Context) {
+	numWorkers := 5
 	orders := make(chan string, 10)
 
-	go op.svc.AccrualForOrder(ctx, orders)
+	for i := 0; i < numWorkers; i++ {
+		go op.svc.AccrualForOrder(ctx, orders)
+	}
 
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()

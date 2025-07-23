@@ -84,7 +84,6 @@ func (os *OrderService) ListUserOrders(ctx context.Context, userID uint64) ([]mo
 // AccrualForOrder performs accrual for order
 func (os *OrderService) AccrualForOrder(ctx context.Context, orderCh <-chan string) {
 	for {
-		var errTooManyReq models.TooManyRequestsError
 		select {
 		case <-ctx.Done():
 			logger.Log.Debug("accrual is done")
@@ -93,42 +92,68 @@ func (os *OrderService) AccrualForOrder(ctx context.Context, orderCh <-chan stri
 			if !ok {
 				return
 			}
+			func() {
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
 
-			logger.Log.Debug("try get accrual for order:", zap.String("number", order))
-			resp, err := os.handler.GetAccrualForOrder(ctx, order)
-			if err != nil {
-				switch {
-				case errors.As(err, &errTooManyReq):
-					duration := errTooManyReq.RetryAfter
-					logger.Log.Debug("too many request", zap.Duration("retry-after", duration))
-					time.Sleep(duration)
-					return
+				var errTooManyReq models.TooManyRequestsError
+				duration := 1 * time.Second
+
+				logger.Log.Debug("starting accrual")
+
+				timer := time.NewTimer(duration)
+				defer timer.Stop()
+
+				for i := 1; i <= 3; i++ {
+					logger.Log.Debug("attempt:", zap.Int("number", i))
+					timer.Reset(duration)
+
+					select {
+					case <-ctx.Done():
+						logger.Log.Debug("timeout")
+						return
+					case <-timer.C:
+						logger.Log.Debug("ticker")
+						duration = 0
+					}
+
+					logger.Log.Debug("try get accrual for order:", zap.String("number", order))
+					resp, err := os.handler.GetAccrualForOrder(ctx, order)
+					if err != nil {
+						switch {
+						case errors.As(err, &errTooManyReq):
+							logger.Log.Debug("too many request")
+							duration = errTooManyReq.RetryAfter
+							continue
+						}
+						logger.Log.Error("accrual request error", zap.Error(err))
+						return
+					}
+
+					logger.Log.Debug("accrual is ok, response:",
+						zap.String("order", resp.Number),
+						zap.String("status", resp.Status),
+						zap.Float64p("accrual", resp.Accrual))
+
+					curOrder, err := os.repo.GetOrderByNumber(ctx, order)
+					if err != nil {
+						logger.Log.Error("get order", zap.String("number", order))
+						return
+					}
+
+					// set new accrual and status
+					curOrder.Accrual = resp.Accrual
+					curOrder.Status = resp.Status
+
+					logger.Log.Debug("update order status", zap.String("number", order))
+					if err := os.repo.UpdateOrderStatus(ctx, *curOrder); err != nil {
+						logger.Log.Error("update order status", zap.String("number", order))
+					}
+
+					logger.Log.Debug("order status has been updated successfully", zap.String("number", order))
+					break
 				}
-				logger.Log.Error("accrual request error", zap.Error(err))
-				return
-			}
-
-			logger.Log.Debug("accrual is ok, response:",
-				zap.String("order", resp.Number),
-				zap.String("status", resp.Status),
-				zap.Float64p("accrual", resp.Accrual))
-
-			curOrder, err := os.repo.GetOrderByNumber(ctx, order)
-			if err != nil {
-				logger.Log.Error("get order", zap.String("number", order))
-				return
-			}
-
-			// set new accrual and status
-			curOrder.Accrual = resp.Accrual
-			curOrder.Status = resp.Status
-
-			logger.Log.Debug("update order status", zap.String("number", order))
-			if err := os.repo.UpdateOrderStatus(ctx, *curOrder); err != nil {
-				logger.Log.Error("update order status", zap.String("number", order))
-			}
-
-			logger.Log.Debug("order status has been updated successfully", zap.String("number", order))
+			}()
 		}
 	}
 }
