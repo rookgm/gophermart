@@ -35,7 +35,7 @@ func NewUserRepository(db *postgres.DB) *UserRepository {
 func (ur *UserRepository) CreateUser(ctx context.Context, user *models.User) (*models.User, error) {
 	err := ur.db.QueryRow(ctx, insertUserQuery, user.Login, user.Password).Scan(&user.ID, &user.Login, &user.Password, &user.CreatedAt)
 	if err != nil {
-		if errCode := ur.db.ErrorCode(err); errCode == "23505" {
+		if errCode := ur.db.ErrorCode(err); errCode == pgErrUniqueViolationCode {
 			return nil, models.ErrConflictData
 		}
 		return nil, err

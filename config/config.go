@@ -8,8 +8,8 @@ import (
 
 const (
 	defaultGMartServerAddress = ":8080"
-	defaultGMartDatabaseDSN   = ""
-	defaultAccrualSystemAddr  = ":8181"
+	defaultGMartDatabaseDSN   = "postgres"
+	defaultAccrualSystemAddr  = "http://localhost:8181"
 	defaultLogLevel           = "debug"
 )
 

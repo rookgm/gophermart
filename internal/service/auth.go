@@ -8,6 +8,11 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
+type TokenService interface {
+	CreateToken(user *models.User) (string, error)
+	VerifyToken(tokenString string) (*models.TokenPayload, error)
+}
+
 // AuthService implements AuthService interface
 type AuthService struct {
 	repo     UserRepository
