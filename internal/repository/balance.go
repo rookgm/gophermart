@@ -57,7 +57,7 @@ func (br *BalanceRepository) Balance(ctx context.Context, userID uint64) (models
 func (br *BalanceRepository) CreateWithdrawal(ctx context.Context, withdraw *models.Withdraw) (*models.Withdraw, error) {
 	err := br.db.QueryRow(ctx, insertWithdrawalQuery, withdraw.UserID, withdraw.OrderNumber, withdraw.Sum).Scan(&withdraw.ID, &withdraw.UserID, &withdraw.OrderNumber, &withdraw.Sum, &withdraw.ProcessedAt)
 	if err != nil {
-		if errCode := br.db.ErrorCode(err); errCode == "23505" {
+		if errCode := br.db.ErrorCode(err); errCode == pgErrUniqueViolationCode {
 			return nil, models.ErrConflictData
 		}
 		return nil, err

@@ -29,6 +29,11 @@ const (
 						SET status = $1, accrual = $2
 						WHERE number = $3
 `
+
+	selectOrders = `
+						SELECT id, user_id, number, status, accrual, uploaded_at FROM orders
+						WHERE status IN ('NEW', 'PROCESSING')
+	`
 )
 
 // OrderRepository implements OrderRepository interface
@@ -45,7 +50,7 @@ func NewOrderRepository(db *postgres.DB) *OrderRepository {
 func (or *OrderRepository) CreateOrder(ctx context.Context, order *models.Order) (*models.Order, error) {
 	err := or.db.QueryRow(ctx, insertOrderQuery, order.UserID, order.Number, order.Status).Scan(&order.ID, &order.UserID, &order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
 	if err != nil {
-		if errCode := or.db.ErrorCode(err); errCode == "23505" {
+		if errCode := or.db.ErrorCode(err); errCode == pgErrUniqueViolationCode {
 			return nil, models.ErrConflictData
 		}
 		return nil, err
@@ -96,20 +101,40 @@ func (or *OrderRepository) GetOrdersByUserID(ctx context.Context, userID uint64)
 
 // UpdateOrderStatus update order status and accrual
 func (or *OrderRepository) UpdateOrderStatus(ctx context.Context, order models.Order) error {
-	tx, err := or.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback(ctx)
-
-	_, err = tx.Exec(ctx, updateOrderQuery, order.Status, order.Accrual, order.Number)
+	cmd, err := or.db.Exec(ctx, updateOrderQuery, order.Status, order.Accrual, order.Number)
 	if err != nil {
 		return err
 	}
 
-	if err := tx.Commit(ctx); err != nil {
-		return err
+	if cmd.RowsAffected() == 0 {
+		return models.ErrDataNotFound
 	}
 
 	return nil
+}
+
+// GetOrders returns orders with status NEW and PROCESSING
+func (or *OrderRepository) GetOrders(ctx context.Context) ([]models.Order, error) {
+	rows, err := or.db.Query(ctx, selectOrders)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	orders := []models.Order{}
+
+	for rows.Next() {
+		order := models.Order{}
+		err = rows.Scan(&order.ID, &order.UserID, &order.Number, &order.Status, &order.Accrual, &order.UploadedAt)
+		if err != nil {
+			continue
+		}
+		orders = append(orders, order)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return orders, nil
 }

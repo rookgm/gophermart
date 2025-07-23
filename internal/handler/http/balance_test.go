@@ -51,21 +51,6 @@ func TestBalanceHandler_GetUserBalance(t *testing.T) {
 			},
 		},
 		{
-			// 401 — пользователь не авторизован.
-			name: "unauthorized_request_return_401",
-			setup: func(t *testing.T) *mocks.MockBalanceService {
-
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				svcMock := mocks.NewMockBalanceService(ctrl)
-				svcMock.EXPECT().GetBalance(gomock.Any(), gomock.Any()).Return(models.Balance{}, nil).Times(0)
-				return svcMock
-			},
-			wantStatusCode: http.StatusUnauthorized,
-			wantBody:       nil,
-		},
-		{
 			// 500 — внутренняя ошибка сервера.
 			name: "internal_error_return_500",
 			token: &models.TokenPayload{
@@ -144,20 +129,6 @@ func TestBalanceHandler_UserBalanceWithdrawal(t *testing.T) {
 				return svcMock
 			},
 			wantStatusCode: http.StatusOK,
-		},
-		{
-			// 401 — пользователь не авторизован.
-			name: "unauthorized_request_return_401",
-			setup: func(t *testing.T) *mocks.MockBalanceService {
-
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				svcMock := mocks.NewMockBalanceService(ctrl)
-				svcMock.EXPECT().BalanceWithdrawal(gomock.Any(), gomock.Any()).Return(nil, nil).Times(0)
-				return svcMock
-			},
-			wantStatusCode: http.StatusUnauthorized,
 		},
 		{
 			// 402 — на счету недостаточно средств;
@@ -294,20 +265,6 @@ func TestBalanceHandler_GetUserWithdrawals(t *testing.T) {
 			},
 			wantStatusCode: http.StatusNoContent,
 			wantBody:       nil,
-		},
-		{
-			// 401 — пользователь не авторизован.
-			name: "unauthorized_request_return_401",
-			setup: func(t *testing.T) *mocks.MockBalanceService {
-
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				svcMock := mocks.NewMockBalanceService(ctrl)
-				svcMock.EXPECT().GetWithdrawals(gomock.Any(), gomock.Any()).Return(nil, nil).Times(0)
-				return svcMock
-			},
-			wantStatusCode: http.StatusUnauthorized,
 		},
 		{
 			// 500 — внутренняя ошибка сервера.

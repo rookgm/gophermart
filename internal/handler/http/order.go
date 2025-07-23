@@ -38,8 +38,8 @@ func NewOrderHandler(svc OrderService) *OrderHandler {
 func (oh *OrderHandler) UploadUserOrder() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
-		if authPayload == nil || !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !ok || authPayload == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 		// get order id
@@ -89,8 +89,8 @@ type ListOrdersResp struct {
 func (oh *OrderHandler) ListUserOrders() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
-		if authPayload == nil || !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !ok || authPayload == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 

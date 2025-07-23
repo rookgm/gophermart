@@ -70,10 +70,10 @@ func (bs *BalanceService) GetWithdrawals(ctx context.Context, userID uint64) ([]
 	withdrawls, err := bs.repo.GetWithdrawalsByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
-	} else {
-		if len(withdrawls) == 0 {
-			return nil, models.ErrWithdrawalsNotExist
-		}
+	}
+
+	if len(withdrawls) == 0 {
+		return nil, models.ErrWithdrawalsNotExist
 	}
 
 	return withdrawls, nil

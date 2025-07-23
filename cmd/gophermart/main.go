@@ -14,6 +14,7 @@ import (
 	"github.com/rookgm/gophermart/internal/repository"
 	"github.com/rookgm/gophermart/internal/repository/postgres"
 	"github.com/rookgm/gophermart/internal/service"
+	"github.com/rookgm/gophermart/internal/worker"
 	"go.uber.org/zap"
 	"log"
 	"net/http"
@@ -84,6 +85,9 @@ func main() {
 	balanceService := service.NewBalanceService(balanceRepo)
 	balanceHandler := handler.NewBalanceHandler(balanceService)
 
+	// order processor for accrual
+	orderProc := worker.NewOrderProcessor(orderService)
+
 	router := chi.NewRouter()
 
 	router.Use(middleware.Logging(logger.Log))
@@ -107,8 +111,12 @@ func main() {
 		Handler: router,
 	}
 
-	logger.Log.Info("Starting server...")
+	logger.Log.Info("Starting order processor")
+	go func() {
+		orderProc.ProcessOrders(ctx)
+	}()
 
+	logger.Log.Info("Starting server...")
 	go func() {
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Log.Fatal("Error starting server", zap.Error(err))
@@ -116,14 +124,11 @@ func main() {
 	}()
 
 	logger.Log.Info("Server is started", zap.String("addr", cfg.GMartServerAddr))
-	<-ctx.Done()
 
-	logger.Log.Info("Shutting down server...")
+	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer cancel()
-
-	orderService.StopAccrual(shutdownCtx)
 
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Log.Error("Error shutdown server", zap.Error(err))

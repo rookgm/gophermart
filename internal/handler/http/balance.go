@@ -41,8 +41,8 @@ type balanceResponse struct {
 func (bh *BalanceHandler) GetUserBalance() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
-		if authPayload == nil || !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !ok || authPayload == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
@@ -80,8 +80,8 @@ type withdrawRequest struct {
 func (bh *BalanceHandler) UserBalanceWithdrawal() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
-		if authPayload == nil || !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !ok || authPayload == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 
@@ -132,8 +132,8 @@ type withdrawalsResponse struct {
 func (bh *BalanceHandler) GetUserWithdrawals() http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		authPayload, ok := getAuthPayload(r.Context(), authPayloadKey)
-		if authPayload == nil || !ok {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
+		if !ok || authPayload == nil {
+			http.Error(w, "internal error", http.StatusInternalServerError)
 			return
 		}
 

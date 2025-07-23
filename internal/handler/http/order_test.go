@@ -82,21 +82,6 @@ func TestOrderHandler_UploadUserOrder(t *testing.T) {
 			wantStatusCode: http.StatusBadRequest,
 		},
 		{
-			// 401 — пользователь не аутентифицирован;
-			name: "unauthorized_request_return_401",
-			body: "286436514",
-			setup: func(t *testing.T) *mocks.MockOrderService {
-
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				svcMock := mocks.NewMockOrderService(ctrl)
-				svcMock.EXPECT().Upload(gomock.Any(), gomock.Any()).Return(nil, errors.New("unauthorized")).Times(0)
-				return svcMock
-			},
-			wantStatusCode: http.StatusUnauthorized,
-		},
-		{
 			// 409 — номер заказа уже был загружен другим пользователем;
 			name: "conflict_request_return_409",
 			token: &models.TokenPayload{
@@ -229,20 +214,6 @@ func TestOrderHandler_ListUserOrders(t *testing.T) {
 				return svcMock
 			},
 			wantStatusCode: http.StatusNoContent,
-		},
-		{
-			// 401 — пользователь не авторизован.
-			name: "unauthorized_request_return_401",
-			setup: func(t *testing.T) *mocks.MockOrderService {
-
-				ctrl := gomock.NewController(t)
-				defer ctrl.Finish()
-
-				svcMock := mocks.NewMockOrderService(ctrl)
-				svcMock.EXPECT().ListUserOrders(gomock.Any(), gomock.Any()).Return(nil, models.ErrDataNotFound).Times(0)
-				return svcMock
-			},
-			wantStatusCode: http.StatusUnauthorized,
 		},
 		{
 			// 500 — внутренняя ошибка сервера.
